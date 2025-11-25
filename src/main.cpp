@@ -89,20 +89,20 @@ int main(int argc, char *argv[]) {
     appInfo.apiVersion = VK_API_VERSION_1_2;
 
     // instance create info
-    VkInstanceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
+    VkInstanceCreateInfo instanceCreateInfo{};
+    instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instanceCreateInfo.pApplicationInfo = &appInfo;
 
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-    createInfo.ppEnabledExtensionNames = extensions.data();
+    instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+    instanceCreateInfo.ppEnabledExtensionNames = extensions.data();
 
     // TODO: currently no validation layers
-    createInfo.enabledLayerCount = 0;
-    createInfo.ppEnabledLayerNames = nullptr;
+    instanceCreateInfo.enabledLayerCount = 0;
+    instanceCreateInfo.ppEnabledLayerNames = nullptr;
 
     // create the instance
     VkInstance instance = VK_NULL_HANDLE;
-    VkResult result = vkCreateInstance(&createInfo, nullptr, &instance);
+    VkResult result = vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
     if (result != VK_SUCCESS) {
         std::cerr << "vkCreateInstance failed with error code " << result << std::endl;
         SDL_DestroyWindow(window);
@@ -196,7 +196,7 @@ int main(int argc, char *argv[]) {
     deviceCreateInfo.ppEnabledExtensionNames = DEVICE_EXTENSIONS.data();
 
     // TODO: currently no old-style validation layers on device (instance layers are enough for now)
-    createInfo.enabledLayerCount = 0;
+    deviceCreateInfo.enabledLayerCount = 0;
 
     if (vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device) != VK_SUCCESS) {
         std::cerr << "Failed to create logical device." << std::endl;
@@ -307,6 +307,9 @@ int main(int argc, char *argv[]) {
 
         if (vkCreateImageView(device, &viewInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
             std::cerr << "Failed to create swap chain image views." << std::endl;
+            for (auto imageView : swapChainImageViews) {
+                vkDestroyImageView(device, imageView, nullptr);
+            }
             vkDestroySwapchainKHR(device, swapChain, nullptr);
             vkDestroySurfaceKHR(instance, surface, nullptr);
             vkDestroyInstance(instance, nullptr);
@@ -388,7 +391,13 @@ int main(int argc, char *argv[]) {
         if (vkCreateFramebuffer(device, &frameBufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
             std::cerr << "Failed to create frame buffer." << std::endl;
             // TODO: do I need to destroy frame buffers here?
+            for (auto framebuffer : swapChainFramebuffers) {
+                vkDestroyFramebuffer(device, framebuffer, nullptr);
+            }
             vkDestroyRenderPass(device, renderPass, nullptr);
+            for (auto imageView : swapChainImageViews) {
+                vkDestroyImageView(device, imageView, nullptr);
+            }
             vkDestroySwapchainKHR(device, swapChain, nullptr);
             vkDestroySurfaceKHR(instance, surface, nullptr);
             vkDestroyInstance(instance, nullptr);
@@ -408,9 +417,24 @@ int main(int argc, char *argv[]) {
 
     if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
         std::cerr << "Failed to create command pool." << std::endl;
-        // TODO: do I need to destroy stuff here?
+        vkDestroyCommandPool(device, commandPool, nullptr);
+        for (auto framebuffer : swapChainFramebuffers) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+        vkDestroyRenderPass(device, renderPass, nullptr);
+        for (auto imageView : swapChainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
+        vkDestroyDevice(device, nullptr);
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+        vkDestroyInstance(instance, nullptr);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 14;
     }
 
+    // --- Command Buffers ---
     commandBuffers.resize(swapChainFramebuffers.size());
 
     VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
@@ -421,7 +445,21 @@ int main(int argc, char *argv[]) {
 
     if (vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers.data()) != VK_SUCCESS) {
         std::cerr << "Failed to allocate command buffers." << std::endl;
-        // TODO: do I need to destroy stuff here?
+        vkDestroyCommandPool(device, commandPool, nullptr);
+        for (auto framebuffer : swapChainFramebuffers) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+        vkDestroyRenderPass(device, renderPass, nullptr);
+        for (auto imageView : swapChainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
+        vkDestroyDevice(device, nullptr);
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+        vkDestroyInstance(instance, nullptr);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 15;
     }
 
     // --- sync objects ---
@@ -440,7 +478,24 @@ int main(int argc, char *argv[]) {
         vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
         vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFence) != VK_SUCCESS) {
         std::cerr << "Failed to create sync objects." << std::endl;
-        // TODO: do I need to destroy stuff here?
+        vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
+        vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
+        vkDestroyFence(device, inFlightFence, nullptr);
+        vkDestroyCommandPool(device, commandPool, nullptr);
+        for (auto framebuffer : swapChainFramebuffers) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+        vkDestroyRenderPass(device, renderPass, nullptr);
+        for (auto imageView : swapChainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
+        vkDestroyDevice(device, nullptr);
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+        vkDestroyInstance(instance, nullptr);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 16;
     }
 
     bool running = true;
