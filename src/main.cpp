@@ -270,7 +270,7 @@ int main(int argc, char *argv[]) {
 
     if (vkCreateSwapchainKHR(device, &swapChainCreateInfo, nullptr, &swapChain) != VK_SUCCESS) {
         std::cerr << "Failed to create swap chain." << std::endl;
-        vkDestroySwapchainKHR(device, swapChain, nullptr);
+        vkDestroyDevice(device, nullptr);
         vkDestroySurfaceKHR(instance, surface, nullptr);
         vkDestroyInstance(instance, nullptr);
         SDL_DestroyWindow(window);
@@ -311,6 +311,7 @@ int main(int argc, char *argv[]) {
                 vkDestroyImageView(device, imageView, nullptr);
             }
             vkDestroySwapchainKHR(device, swapChain, nullptr);
+            vkDestroyDevice(device, nullptr);
             vkDestroySurfaceKHR(instance, surface, nullptr);
             vkDestroyInstance(instance, nullptr);
             SDL_DestroyWindow(window);
@@ -362,6 +363,7 @@ int main(int argc, char *argv[]) {
         std::cerr << "Failed to create render pass." << std::endl;
         vkDestroyRenderPass(device, renderPass, nullptr);
         vkDestroySwapchainKHR(device, swapChain, nullptr);
+        vkDestroyDevice(device, nullptr);
         vkDestroySurfaceKHR(instance, surface, nullptr);
         vkDestroyInstance(instance, nullptr);
         SDL_DestroyWindow(window);
@@ -399,6 +401,7 @@ int main(int argc, char *argv[]) {
                 vkDestroyImageView(device, imageView, nullptr);
             }
             vkDestroySwapchainKHR(device, swapChain, nullptr);
+            vkDestroyDevice(device, nullptr);
             vkDestroySurfaceKHR(instance, surface, nullptr);
             vkDestroyInstance(instance, nullptr);
             SDL_DestroyWindow(window);
@@ -682,7 +685,7 @@ bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) {
         swapChainAdequate = !swapChainSupport.formats.empty() &&
                             !swapChainSupport.presentModes.empty();
     }
-    return indices.isComplete() && extensionsSupported && swapChainAdequate && extensionsSupported;
+    return indices.isComplete() && extensionsSupported && swapChainAdequate;
 }
 
 bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
