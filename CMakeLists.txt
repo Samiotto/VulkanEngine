@@ -31,4 +31,8 @@ target_include_directories(VulkanEngine PRIVATE
         external/SDL2/include)
 
 # Target Win32 Vulkan
-target_compile_definitions(VulkanEngine PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+if (WIN32)
+    target_compile_definitions(VulkanEngine PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+elseif (APPLE)
+    # directly target metal surface types if needed, but gonna try to avoid that
+endif()

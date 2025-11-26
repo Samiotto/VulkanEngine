@@ -1,6 +1,7 @@
 #include <SDL.h>
 #include <SDL_vulkan.h>
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 #include <iostream>
 #include <vector>
@@ -169,6 +170,11 @@ int main(int argc, char *argv[]) {
 
     instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     instanceCreateInfo.ppEnabledExtensionNames = extensions.data();
+
+    // set flags for portability on apple platform
+#ifdef __APPLE__
+    instanceCreateInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     if (ENABLE_VALIDATION_LAYERS) {
@@ -976,6 +982,12 @@ std::vector<const char*> getRequiredExtensions(SDL_Window* window) {
     if (!SDL_Vulkan_GetInstanceExtensions(window, &sdlExtensionsCount, extensions.data())) {
         throw std::runtime_error("Failed to get SDL Vulkan extensions (2nd call)");
     }
+
+    // on apple only, enable portability enumeration
+#ifdef __APPLE__
+    extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+#endif
+
 
     if (ENABLE_VALIDATION_LAYERS) {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
