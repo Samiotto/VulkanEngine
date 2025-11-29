@@ -35,4 +35,5 @@ if (WIN32)
     target_compile_definitions(VulkanEngine PRIVATE VK_USE_PLATFORM_WIN32_KHR)
 elseif (APPLE)
     # directly target metal surface types if needed, but gonna try to avoid that
+    target_compile_definitions(VulkanEngine PRIVATE VK_USE_PLATFORM_METAL_EXT)
 endif()
