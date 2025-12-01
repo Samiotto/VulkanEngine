@@ -596,9 +596,11 @@ int main(int argc, char *argv[]) {
     }
 
     // --- sync objects ---
-    VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
-    VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
-    VkFence inFlightFence = VK_NULL_HANDLE;
+    const size_t MAX_FRAMES_IN_FLIGHT = 2;
+    std::vector<VkSemaphore> imageAvailableSemaphores(MAX_FRAMES_IN_FLIGHT);
+    std::vector<VkFence> inFlightFences(MAX_FRAMES_IN_FLIGHT);
+    std::vector<VkFence> imagesInFlight(swapChainImages.size(), VK_NULL_HANDLE);
+    std::vector<VkSemaphore> renderFinishedSemaphores(swapChainImages.size());
 
     VkSemaphoreCreateInfo semaphoreCreateInfo{};
     semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -607,31 +609,64 @@ int main(int argc, char *argv[]) {
     fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // start signaled so first frame doesn't block forever
 
-    if (vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
-        vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
-        vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFence) != VK_SUCCESS) {
-        std::cerr << "Failed to create sync objects." << std::endl;
-        vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
-        vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
-        vkDestroyFence(device, inFlightFence, nullptr);
-        vkDestroyCommandPool(device, commandPool, nullptr);
-        for (auto framebuffer : swapChainFramebuffers) {
-            vkDestroyFramebuffer(device, framebuffer, nullptr);
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        if (vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
+            vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+            std::cerr << "Failed to create sync objects." << std::endl;
+            for (size_t j = 0; j <= i; ++j) {
+                vkDestroySemaphore(device, imageAvailableSemaphores[j], nullptr);
+                vkDestroyFence(device, inFlightFences[j], nullptr);
+            }
+            vkDestroyCommandPool(device, commandPool, nullptr);
+            for (auto framebuffer : swapChainFramebuffers) {
+                vkDestroyFramebuffer(device, framebuffer, nullptr);
+            }
+            vkDestroyRenderPass(device, renderPass, nullptr);
+            for (auto imageView : swapChainImageViews) {
+                vkDestroyImageView(device, imageView, nullptr);
+            }
+            vkDestroySwapchainKHR(device, swapChain, nullptr);
+            vkDestroyDevice(device, nullptr);
+            vkDestroySurfaceKHR(instance, surface, nullptr);
+            if (ENABLE_VALIDATION_LAYERS) {
+                DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+            }
+            vkDestroyInstance(instance, nullptr);
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return 16;
         }
-        vkDestroyRenderPass(device, renderPass, nullptr);
-        for (auto imageView : swapChainImageViews) {
-            vkDestroyImageView(device, imageView, nullptr);
+    }
+
+    for (size_t i = 0; i < swapChainImages.size(); ++i) {
+        if (vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS) {
+            std::cerr << "Failed to create render finished semaphores." << std::endl;
+            for (size_t j = 0; j < MAX_FRAMES_IN_FLIGHT; ++j) {
+                vkDestroySemaphore(device, imageAvailableSemaphores[j], nullptr);
+                vkDestroyFence(device, inFlightFences[j], nullptr);
+            }
+            for (size_t j = 0; j < i; ++j) {
+                vkDestroySemaphore(device, renderFinishedSemaphores[j], nullptr);
+            }
+            vkDestroyCommandPool(device, commandPool, nullptr);
+            for (auto framebuffer : swapChainFramebuffers) {
+                vkDestroyFramebuffer(device, framebuffer, nullptr);
+            }
+            vkDestroyRenderPass(device, renderPass, nullptr);
+            for (auto imageView : swapChainImageViews) {
+                vkDestroyImageView(device, imageView, nullptr);
+            }
+            vkDestroySwapchainKHR(device, swapChain, nullptr);
+            vkDestroyDevice(device, nullptr);
+            vkDestroySurfaceKHR(instance, surface, nullptr);
+            if (ENABLE_VALIDATION_LAYERS) {
+                DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+            }
+            vkDestroyInstance(instance, nullptr);
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return 16;
         }
-        vkDestroySwapchainKHR(device, swapChain, nullptr);
-        vkDestroyDevice(device, nullptr);
-        vkDestroySurfaceKHR(instance, surface, nullptr);
-        if (ENABLE_VALIDATION_LAYERS) {
-            DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
-        }
-        vkDestroyInstance(instance, nullptr);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 16;
     }
 
     // --- Vertex buffer ---
@@ -788,8 +823,11 @@ int main(int argc, char *argv[]) {
     vkDestroyShaderModule(device, vertShaderModule, nullptr);
     vkDestroyShaderModule(device, fragShaderModule, nullptr);
 
+    uint32_t run = 0; // TODO: remove, for limiting debugging messages
     bool running = true;
+    size_t currentFrame = 0;
     while (running) {
+        ++run; // TODO: remove, for limiting debugging messages
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
@@ -803,14 +841,16 @@ int main(int argc, char *argv[]) {
         // do rendering stuff and things
 
         // --- record command buffer for a given swapchain image
-        vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
-        vkResetFences(device, 1, &inFlightFence);
+        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+        vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
         // Acquire image
+        if (run < 10) // TODO: remove, for limiting debugging messages
+            std::cout << "Acquiring image, run: " << run << std::endl;
         uint32_t imageIndex = 0;
         VkResult result = vkAcquireNextImageKHR(
                 device, swapChain, UINT64_MAX,
-                imageAvailableSemaphore,VK_NULL_HANDLE, &imageIndex
+                imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex
                 );
 
         if (result != VK_SUCCESS) {
@@ -819,6 +859,11 @@ int main(int argc, char *argv[]) {
             running = false;
             continue;
         }
+
+        if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+            vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+        }
+        imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
         // Record command buffer for this image
         VkCommandBuffer cmd = commandBuffers[imageIndex];
@@ -869,9 +914,9 @@ int main(int argc, char *argv[]) {
 
         // --- submit and present ---
 
-        VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };
+        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
+        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[imageIndex] };
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -883,7 +928,7 @@ int main(int argc, char *argv[]) {
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence) != VK_SUCCESS) {
+        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
             std::cerr << "Failed to submit command buffer submission." << std::endl;
             running = false;
             continue;
@@ -907,6 +952,7 @@ int main(int argc, char *argv[]) {
         }
 
         SDL_Delay(10);
+        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     // vulkan stuff
@@ -918,9 +964,13 @@ int main(int argc, char *argv[]) {
     vkDestroyBuffer(device, vertexBuffer, nullptr);
     vkFreeMemory(device, vertexBufferMemory, nullptr);
 
-    vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
-    vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
-    vkDestroyFence(device, inFlightFence, nullptr);
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
+        vkDestroyFence(device, inFlightFences[i], nullptr);
+    }
+    for (size_t i = 0; i < swapChainImages.size(); ++i) {
+        vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
+    }
 
     vkDestroyCommandPool(device, commandPool, nullptr);
 
