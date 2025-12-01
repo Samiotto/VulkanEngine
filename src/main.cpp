@@ -65,9 +65,9 @@ struct Vertex {
 
 const std::vector<Vertex> TRIANGLE_VERTICES = {
     // pos, color
-    { {  0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
+    { { -0.5f,  0.5f }, { 0.0f, 0.0f, 1.0f } },
     { {  0.5f,  0.5f }, { 0.0f, 1.0f, 0.0f } },
-    { { -0.5f,  0.5f }, { 0.0f, 0.0f, 1.0f } }
+    { {  0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
 };
 
 const std::vector<const char*> DEVICE_EXTENSIONS = {
